@@ -8,17 +8,28 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
+// Ensure the implementation satisfies the expected interfaces.
+var (
+	_ datasource.DataSource              = &extensionsDataSource{}
+	_ datasource.DataSourceWithConfigure = &extensionsDataSource{}
+)
+
+// NewCoffeesDataSource is a helper function to simplify the provider implementation.
+func NewExtensionDataSource() datasource.DataSource {
+	return &extensionsDataSource{}
+}
+
 type extensionsDataSourceModel struct {
-	Extensions []exitensionModel `json:"extensions"`
+	Extensions []exitensionModel `tfsdk:"extensions"`
 }
 
 type exitensionModel struct {
-	Extension types.String `json:"extension"`
-	Name      types.String `json:"name"`
+	Extension types.String `tfsdk:"extension"`
+	Name      types.String `tfsdk:"name"`
 }
 
 type extensionsDataSource struct {
-	//client *excel_client.Client
+	client *excel_client.Client
 }
 
 // Metadata returns the data source type name.
@@ -70,4 +81,13 @@ func (d *extensionsDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	if resp.Diagnostics.HasErrors() {
 		return
 	}
+}
+
+// Configure adds the provider configured client to the data source.
+func (d *extensionsDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, _ *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	d.client = req.ProviderData.(*excel_client.Client)
 }
