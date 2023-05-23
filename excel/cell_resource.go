@@ -1,4 +1,3 @@
-// THIS IS THE NEXT STEP IN THE PROCESS
 package excel
 
 import (
@@ -15,34 +14,36 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &sheetResource{}
-	_ resource.ResourceWithConfigure = &sheetResource{}
+	_ resource.Resource              = &cellResource{}
+	_ resource.ResourceWithConfigure = &cellResource{}
 )
 
 // NewOrderResource is a helper function to simplify the provider implementation.
-func NewSheetResource() resource.Resource {
+func NewCellResource() resource.Resource {
 	return &sheetResource{}
 }
 
-type sheetResource struct {
+type cellResource struct {
 	client *client.ExcelClient
 }
 
-type sheetResourceModel struct {
+type cellResourceModel struct {
 	ID          types.String `tfsdk:"id"`
 	LastUpdated types.String `tfsdk:"last_updated"`
 	WorkbookID  types.String `tfsdk:"workbook_id"`
-	Name        types.String `tfsdk:"name"`
-	Pos         types.Int64  `tfsdk:"pos"`
+	SheetID     types.String `tfsdk:"sheet_id"`
+	Row         types.Int64  `tfsdk:"row"`
+	Value       types.String `tfsdk:"value"`
+	Column      types.String `tfsdk:"column"`
 }
 
 // Metadata returns the resource type name.
-func (r *sheetResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_sheet"
+func (r *cellResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_cell"
 }
 
 // Schema defines the schema for the resource.
-func (r *sheetResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *cellResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -51,11 +52,17 @@ func (r *sheetResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 			"workbook_id": schema.StringAttribute{
 				Required: true,
 			},
-			"name": schema.StringAttribute{
+			"sheet_id": schema.StringAttribute{
 				Required: true,
 			},
-			"pos": schema.Int64Attribute{
+			"row": schema.Int64Attribute{
 				Computed: true,
+			},
+			"column": schema.StringAttribute{
+				Required: true,
+			},
+			"value": schema.StringAttribute{
+				Required: true,
 			},
 			"last_updated": schema.StringAttribute{
 				Computed: true,
@@ -64,29 +71,30 @@ func (r *sheetResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 	}
 }
 
-func (r *sheetResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *cellResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// creates the model, and populates it with values from the plan
-	var plan sheetResourceModel
+	var plan cellResourceModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// creates the sheet with help of the client
-	sheet, err := r.client.CreateSheet(plan.WorkbookID.ValueString(), plan.Name.ValueString())
+	// creates the cell with help of the client
+	cell, err := r.client.CreateCell(plan.WorkbookID.ValueString(), plan.SheetID.ValueString(), plan.Row.ValueInt64(), plan.Column.ValueString(), plan.Value.ValueString)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"failed to create workbook: %s",
+			"failed to create cell: %s",
 			err.Error(),
 		)
 		return
 	}
 
 	// maps the values we got from the client to the terraform model
-	plan.ID = types.StringValue(sheet.ID)
-	plan.Name = types.StringValue(sheet.Name)
-	plan.Pos = types.Int64Value(int64(sheet.Pos))
+	plan.ID = types.StringValue(cell.ID)
+	plan.Row = types.Int64Value(int64(cell.Row))
+	plan.Column = types.StringValue(cell.Column)
+	plan.Value = types.StringValue(cell.Value)
 
 	// updates last_updated
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
@@ -100,9 +108,9 @@ func (r *sheetResource) Create(ctx context.Context, req resource.CreateRequest, 
 }
 
 // Read resource information
-func (r *sheetResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *cellResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	// Get current state
-	var state sheetResourceModel
+	var state cellResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -110,19 +118,20 @@ func (r *sheetResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	}
 
 	// Get refreshed sheet value from client
-	sheet, err := r.client.ReadSheet(state.WorkbookID.ValueString(), state.ID.ValueString())
+	cell, err := r.client.ReadCell(state.WorkbookID.ValueString(), state.SheetID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Reading Sheet",
-			"Could not read sheet with ID "+state.ID.ValueString()+": "+err.Error(),
+			"Error Reading cell",
+			"Could not read cell with ID "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
 	// Overwrite items with refreshed state
-	state.ID = types.StringValue(sheet.ID)
-	state.Name = types.StringValue(sheet.Name)
-	state.Pos = types.Int64Value(int64(sheet.Pos))
+	state.ID = types.StringValue(cell.ID)
+	state.Row = types.Int64Value(int64(cell.Row))
+	state.Column = types.StringValue(cell.Column)
+	state.Value = types.StringValue(cell.Value)
 
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -134,9 +143,9 @@ func (r *sheetResource) Read(ctx context.Context, req resource.ReadRequest, resp
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
-func (r *sheetResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *cellResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// Retrieve values from state
-	var state sheetResourceModel
+	var state cellResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -144,27 +153,27 @@ func (r *sheetResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 	}
 
 	// Delete existing order
-	err := r.client.DeleteSheet(state.WorkbookID.ValueString(), state.ID.ValueString())
+	err := r.client.DeleteCell(state.WorkbookID.ValueString(), state.SheetID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Deleting sheet",
-			"Could not delete sheet, unexpected error: "+err.Error(),
+			"Error Deleting cell",
+			"Could not delete cell, unexpected error: "+err.Error(),
 		)
 		return
 	}
 }
 
 // update the workbook
-func (r *sheetResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *cellResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// old state
-	var state sheetResourceModel
+	var state cellResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	// Retrieve values from plan
-	var plan sheetResourceModel
+	var plan cellResourceModel
 	diags = req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -172,38 +181,39 @@ func (r *sheetResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 
 	// Converts tf-workbook-model to excel.Sheet
-	sheet := &models.Sheet{
-		ID:   state.ID.ValueString(),
-		Name: plan.Name.ValueString(),
-		Pos:  int(plan.Pos.ValueInt64()),
+	cell := &models.Cell{
+		ID:     state.ID.ValueString(),
+		Row:    int(plan.Row.ValueInt64()),
+		Column: plan.Column.ValueString(),
+		Value:  plan.Value.ValueString(),
 	}
 
 	// Update existing order
-	_, err := r.client.UpdateSheet(plan.WorkbookID.ValueString(), sheet)
+	_, err := r.client.UpdateCell(plan.WorkbookID.ValueString(), plan.SheetID.ValueString(), cell)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Updating Workbook",
-			"Could not update workbook, unexpected error: "+err.Error(),
+			"Error Updating cell",
+			"Could not update cell, unexpected error: "+err.Error(),
 		)
 		return
 	}
 
 	// Fetch updated items from GetOrder as UpdateOrder items are not
 	// populated.
-	sheet, err = r.client.ReadSheet(plan.WorkbookID.ValueString(), state.ID.ValueString())
+	cell, err = r.client.ReadCell(plan.WorkbookID.ValueString(), state.SheetID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Reading Sheet",
-			"Could not read Sheet ID "+plan.ID.ValueString()+": "+err.Error(),
+			"Error Reading cell",
+			"Could not read cell ID "+plan.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
 	// Overwrite items with refreshed state
-	plan.ID = types.StringValue(sheet.ID)
-	plan.WorkbookID = state.WorkbookID
-	plan.Name = types.StringValue(sheet.Name)
-	plan.Pos = types.Int64Value(int64(sheet.Pos))
+	plan.ID = types.StringValue(cell.ID)
+	plan.Row = types.Int64Value(int64(cell.Row))
+	plan.Column = types.StringValue(cell.Column)
+	plan.Value = types.StringValue(cell.Value)
 
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
 
@@ -215,7 +225,7 @@ func (r *sheetResource) Update(ctx context.Context, req resource.UpdateRequest, 
 }
 
 // Configure adds the provider configured client to the resource.
-func (r *sheetResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
+func (r *cellResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
