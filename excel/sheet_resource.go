@@ -85,7 +85,6 @@ func (r *sheetResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	// maps the values we got from the client to the terraform model
 	plan.ID = types.StringValue(sheet.ID)
-	plan.WorkbookID = plan.WorkbookID
 	plan.Name = types.StringValue(sheet.Name)
 	plan.Pos = types.Int64Value(int64(sheet.Pos))
 
@@ -122,7 +121,6 @@ func (r *sheetResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	// Overwrite items with refreshed state
 	state.ID = types.StringValue(sheet.ID)
-	state.WorkbookID = state.WorkbookID
 	state.Name = types.StringValue(sheet.Name)
 	state.Pos = types.Int64Value(int64(sheet.Pos))
 
