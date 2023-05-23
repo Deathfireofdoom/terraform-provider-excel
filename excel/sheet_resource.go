@@ -1,3 +1,4 @@
+// THIS IS THE NEXT STEP IN THE PROCESS
 package excel
 
 import (
@@ -14,47 +15,47 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &workbookResource{}
-	_ resource.ResourceWithConfigure = &workbookResource{}
+	_ resource.Resource              = &sheetResource{}
+	_ resource.ResourceWithConfigure = &sheetResource{}
 )
 
 // NewOrderResource is a helper function to simplify the provider implementation.
-func NewWorkbookResource() resource.Resource {
-	return &workbookResource{}
+func NewSheetResource() resource.Resource {
+	return &sheetResource{}
 }
 
-type workbookResource struct {
+type sheetResource struct {
 	client *client.ExcelClient
 }
 
-type workbookResourceModel struct {
+type sheetResourceModel struct {
 	ID          types.String `tfsdk:"id"`
 	LastUpdated types.String `tfsdk:"last_updated"`
-	FileName    types.String `tfsdk:"file_name"`
-	Extension   types.String `tfsdk:"extension"`
-	FolderPath  types.String `tfsdk:"folder_path"`
+	WorkbookID  types.String `tfsdk:"workbook_id"`
+	Name        types.String `tfsdk:"name"`
+	Pos         types.Int64  `tfsdk:"pos"`
 }
 
 // Metadata returns the resource type name.
-func (r *workbookResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_workbook"
+func (r *sheetResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_sheet"
 }
 
 // Schema defines the schema for the resource.
-func (r *workbookResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *sheetResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
 			},
-			"file_name": schema.StringAttribute{
+			"workbook_id": schema.StringAttribute{
 				Required: true,
 			},
-			"folder_path": schema.StringAttribute{
+			"name": schema.StringAttribute{
 				Required: true,
 			},
-			"extension": schema.StringAttribute{
-				Required: true,
+			"pos": schema.Int64Attribute{
+				Computed: true,
 			},
 			"last_updated": schema.StringAttribute{
 				Computed: true,
@@ -63,17 +64,17 @@ func (r *workbookResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 	}
 }
 
-func (r *workbookResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *sheetResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// creates the model, and populates it with values from the plan
-	var plan workbookResourceModel
+	var plan sheetResourceModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// creates the workbook with help of the client
-	workbook, err := r.client.CreateWorkbook(plan.FolderPath.ValueString(), plan.FileName.ValueString(), plan.Extension.ValueString(), "")
+	// creates the sheet with help of the client
+	sheet, err := r.client.CreateSheet(plan.WorkbookID.ValueString(), plan.Name.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"failed to create workbook: %s",
@@ -83,10 +84,10 @@ func (r *workbookResource) Create(ctx context.Context, req resource.CreateReques
 	}
 
 	// maps the values we got from the client to the terraform model
-	plan.ID = types.StringValue(workbook.ID)
-	plan.FileName = types.StringValue(workbook.FileName)
-	plan.Extension = types.StringValue(string(workbook.Extension))
-	plan.FolderPath = types.StringValue(workbook.FolderPath)
+	plan.ID = types.StringValue(sheet.ID)
+	plan.WorkbookID = plan.WorkbookID
+	plan.Name = types.StringValue(sheet.Name)
+	plan.Pos = types.Int64Value(int64(sheet.Pos))
 
 	// updates last_updated
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
@@ -100,9 +101,9 @@ func (r *workbookResource) Create(ctx context.Context, req resource.CreateReques
 }
 
 // Read resource information
-func (r *workbookResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *sheetResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	// Get current state
-	var state workbookResourceModel
+	var state sheetResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -110,20 +111,20 @@ func (r *workbookResource) Read(ctx context.Context, req resource.ReadRequest, r
 	}
 
 	// Get refreshed order value from HashiCups
-	workbook, err := r.client.ReadWorkbook(state.ID.ValueString())
+	sheet, err := r.client.ReadSheet(state.WorkbookID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Reading Workbook",
-			"Could not read workbook with ID "+state.ID.ValueString()+": "+err.Error(),
+			"Error Reading Sheet",
+			"Could not read sheet with ID "+state.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
 	// Overwrite items with refreshed state
-	state.ID = types.StringValue(workbook.ID)
-	state.FileName = types.StringValue(workbook.FileName)
-	state.Extension = types.StringValue(string(workbook.Extension))
-	state.FolderPath = types.StringValue(workbook.FolderPath)
+	state.ID = types.StringValue(sheet.ID)
+	state.WorkbookID = state.WorkbookID
+	state.Name = types.StringValue(sheet.Name)
+	state.Pos = types.Int64Value(int64(sheet.Pos))
 
 	// Set refreshed state
 	diags = resp.State.Set(ctx, &state)
@@ -135,9 +136,9 @@ func (r *workbookResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
-func (r *workbookResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *sheetResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	// Retrieve values from state
-	var state workbookResourceModel
+	var state sheetResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -145,43 +146,42 @@ func (r *workbookResource) Delete(ctx context.Context, req resource.DeleteReques
 	}
 
 	// Delete existing order
-	err := r.client.DeleteWorkbook(state.ID.ValueString())
+	err := r.client.DeleteSheet(state.WorkbookID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Deleting Workbook",
-			"Could not delete workbook, unexpected error: "+err.Error(),
+			"Error Deleting sheet",
+			"Could not delete sheet, unexpected error: "+err.Error(),
 		)
 		return
 	}
 }
 
 // update the workbook
-func (r *workbookResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *sheetResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	// old state
-	var state workbookResourceModel
+	var state sheetResourceModel
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	// Retrieve values from plan
-	var plan workbookResourceModel
+	var plan sheetResourceModel
 	diags = req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Converts tf-workbook-model to excel.Workbook
-	workbook := &models.Workbook{
-		ID:         state.ID.ValueString(),
-		FileName:   plan.FileName.ValueString(),
-		Extension:  models.Extension(plan.Extension.ValueString()),
-		FolderPath: plan.FolderPath.ValueString(),
+	// Converts tf-workbook-model to excel.Sheet
+	sheet := &models.Sheet{
+		ID:   state.ID.ValueString(),
+		Name: plan.Name.ValueString(),
+		Pos:  int(plan.Pos.ValueInt64()),
 	}
 
 	// Update existing order
-	_, err := r.client.UpdateWorkbook(workbook)
+	_, err := r.client.UpdateSheet(plan.WorkbookID.ValueString(), sheet)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error Updating Workbook",
@@ -192,20 +192,20 @@ func (r *workbookResource) Update(ctx context.Context, req resource.UpdateReques
 
 	// Fetch updated items from GetOrder as UpdateOrder items are not
 	// populated.
-	workbook, err = r.client.ReadWorkbook(state.ID.ValueString())
+	sheet, err = r.client.ReadSheet(plan.WorkbookID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error Reading Workbook",
-			"Could not read Workbook ID "+plan.ID.ValueString()+": "+err.Error(),
+			"Error Reading Sheet",
+			"Could not read Sheet ID "+plan.ID.ValueString()+": "+err.Error(),
 		)
 		return
 	}
 
-	// Update resource state with updated items and timestamp
-	plan.ID = types.StringValue(workbook.ID)
-	plan.FileName = types.StringValue(workbook.FileName)
-	plan.Extension = types.StringValue(string(workbook.Extension))
-	plan.FolderPath = types.StringValue(workbook.FolderPath)
+	// Overwrite items with refreshed state
+	plan.ID = types.StringValue(sheet.ID)
+	plan.WorkbookID = state.WorkbookID
+	plan.Name = types.StringValue(sheet.Name)
+	plan.Pos = types.Int64Value(int64(sheet.Pos))
 
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
 
@@ -217,7 +217,7 @@ func (r *workbookResource) Update(ctx context.Context, req resource.UpdateReques
 }
 
 // Configure adds the provider configured client to the resource.
-func (r *workbookResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
+func (r *sheetResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}

@@ -6,6 +6,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/Deathfireofdoom/excel-client-go/pkg/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -15,7 +17,7 @@ var (
 )
 
 // NewCoffeesDataSource is a helper function to simplify the provider implementation.
-func NewExtensionDataSource() datasource.DataSource {
+func NewExtensionsDataSource() datasource.DataSource {
 	return &extensionsDataSource{}
 }
 
@@ -25,11 +27,10 @@ type extensionsDataSourceModel struct {
 
 type exitensionModel struct {
 	Extension types.String `tfsdk:"extension"`
-	Name      types.String `tfsdk:"name"`
 }
 
 type extensionsDataSource struct {
-	client *excel_client.Client
+	client *client.ExcelClient
 }
 
 // Metadata returns the data source type name.
@@ -37,15 +38,14 @@ func (d *extensionsDataSource) Metadata(_ context.Context, req datasource.Metada
 	resp.TypeName = req.ProviderTypeName + "_extensions"
 }
 
-func (d *extensionsDataSourceModel) Schema(_ context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *extensionsDataSource) Schema(_ context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Attributes: map[string]schema.Schema{
+		Attributes: map[string]schema.Attribute{
 			"extensions": schema.ListNestedAttribute{
 				Computed: true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"extension": schema.StringAttribute{Computed: true},
-						"name":      schema.StringAttribute{Computed: true},
 					},
 				},
 			},
@@ -58,19 +58,12 @@ func (d *extensionsDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	var state extensionsDataSourceModel
 
 	// uses the client to get the extensions
-	extensions, err := d.client.GetExtensions()
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unabled to read extensions from excel client",
-			err.Error())
-		return
-	}
+	extensions := d.client.GetExtensions()
 
 	// maps the extensions to the model
 	for _, extension := range extensions {
 		extensionState := exitensionModel{
-			Extension: types.StringValue(extension.Extension),
-			Name:      types.StringValue(extension.Name),
+			Extension: types.StringValue(extension),
 		}
 		state.Extensions = append(state.Extensions, extensionState)
 	}
@@ -78,7 +71,7 @@ func (d *extensionsDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	// set the state
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasErrors() {
+	if resp.Diagnostics.HasError() {
 		return
 	}
 }
@@ -89,5 +82,5 @@ func (d *extensionsDataSource) Configure(_ context.Context, req datasource.Confi
 		return
 	}
 
-	d.client = req.ProviderData.(*excel_client.Client)
+	d.client = req.ProviderData.(*client.ExcelClient)
 }
